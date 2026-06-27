@@ -102,37 +102,62 @@ export default function App() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mr = new MediaRecorder(stream)
       
-      mr.ondataavailable = async (e) => {
-        if (e.data.size > 0) {
-          setIsLoading(true)
-          const formData = new FormData()
-          formData.append('file', e.data, 'audio.webm')
-          
-          try {
-            const res = await fetch(`${API_BASE}/api/stt`, {
-              method: 'POST',
-              body: formData
-            })
-            if (!res.ok) throw new Error(`STT HTTP ${res.status}`)
-            
-            const data = await res.json()
-            if (data.text) {
-              await sendMessage(data.text, true) // Play voice back
-            } else {
-              push('sys', 'لم يتم التقاط أي صوت بوضوح.')
-              setIsLoading(false)
-            }
-          } catch (err) {
-            console.error('STT Error:', err)
-            push('sys', 'حدث خطأ أثناء معالجة الصوت.')
+      // Pick a supported MIME type
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : ''
+
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      const chunks: BlobPart[] = []
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data)
+      }
+
+      mr.onstop = async () => {
+        // Stop all mic tracks immediately
+        stream.getTracks().forEach((t) => t.stop())
+
+        if (chunks.length === 0) {
+          push('sys', 'لم يتم تسجيل أي صوت.')
+          return
+        }
+
+        const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' })
+        setIsLoading(true)
+
+        const formData = new FormData()
+        formData.append('file', blob, 'recording.webm')
+
+        try {
+          const res = await fetch(`${API_BASE}/api/stt`, {
+            method: 'POST',
+            body: formData,
+          })
+          if (!res.ok) {
+            const errText = await res.text()
+            throw new Error(`STT ${res.status}: ${errText}`)
+          }
+
+          const data = await res.json()
+          if (data.text) {
+            await sendMessage(data.text, true)
+          } else {
+            push('sys', 'لم يتم التقاط أي صوت بوضوح.')
             setIsLoading(false)
           }
+        } catch (err) {
+          console.error('STT Error:', err)
+          push('sys', 'حدث خطأ أثناء معالجة الصوت.')
+          setIsLoading(false)
         }
       }
-      
-      mr.start()
+
+      // Collect data every 250ms to avoid a single empty chunk at stop
+      mr.start(250)
       mediaRecorderRef.current = mr
       setIsRecording(true)
     } catch (err) {
