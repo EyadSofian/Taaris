@@ -1,0 +1,25 @@
+[project]
+name = "ai-companion-backend"
+version = "0.1.0"
+description = "Personal AI companion — local-first FastAPI backend"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "python-dotenv>=1.0",
+  "httpx>=0.27",
+]
+
+# Phase-gated extras — install as each phase lands. Pinned here in one place.
+[project.optional-dependencies]
+voice = ["elevenlabs>=1.0", "faster-whisper>=1.0"]            # Phase 1
+llm = ["ollama>=0.3", "langgraph>=0.2", "langchain-core>=0.3"] # Phase 1/3
+memory = ["psycopg[binary]>=3.2", "pgvector>=0.3", "sentence-transformers>=3.0"]  # Phase 2
+tools = ["tavily-python>=0.5"]                                 # Phase 3
+# NOTE: browser-use REQUIRES Python >=3.11 — upgrade the interpreter before Phase 4.
+browser = ["browser-use>=0.1", "playwright>=1.45"]            # Phase 4
+
+[tool.ruff]
+line-length = 100
